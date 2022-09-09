@@ -126,7 +126,34 @@ function m:AddStyle(s : ModuleScript)
 	proximityPromptStyles[s.Name] = newStyle
 end
 
+local typeTriggeredCallbacks = {}
 local typeGuards = {}
+
+function m:AddTriggeredCallback(promptType, callback)
+	local theseCallbacks= typeTriggeredCallbacks[promptType]
+
+	if not theseCallbacks then
+		theseCallbacks = {}
+		typeTriggeredCallbacks[promptType] = theseCallbacks
+	end
+
+	assert(not table.find(theseCallbacks, callback), "Duplicate guard function found")
+
+	table.insert(theseCallbacks, callback)
+end
+
+function m:RemoveTriggeredCallback(promptType, callback)
+	local theseCallbacks = typeTriggeredCallbacks[promptType]
+
+	if not theseCallbacks then
+		theseCallbacks = {}
+		typeTriggeredCallbacks[promptType] = theseCallbacks
+
+		return
+	end
+
+	table.remove(theseCallbacks, table.find(theseCallbacks, callback))
+end
 
 -- Guard functions return 'true' to guard the function call.
 function m:AddTypeGuard(promptType, guardF)
@@ -139,7 +166,7 @@ function m:AddTypeGuard(promptType, guardF)
 
 	assert(not table.find(theseGuards, guardF), "Duplicate guard function found")
 
-	table.insert(typeGuards, guardF)
+	table.insert(theseGuards, guardF)
 end
 
 function m:RemoveTypeGuard(promptType, guardF)
@@ -175,6 +202,12 @@ proximityPromptService.PromptShown:Connect(function(prompt, inputType)
 	end
 
 	style:Show(prompt, inputType, promptType)
+
+	local _tConn = prompt.Triggered:Connect(function()
+		for _, callback in ipairs(typeTriggeredCallbacks[promptType] or {}) do
+			if callback(prompt) then return end
+		end
+	end)
 
 	prompt.PromptHidden:Wait()
 
