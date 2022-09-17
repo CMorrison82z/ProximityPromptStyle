@@ -126,6 +126,28 @@ function m:AddStyle(s : ModuleScript)
 	proximityPromptStyles[s.Name] = newStyle
 end
 
+function m:AddStyles(cont : Folder)
+	for index, s in ipairs(cont:GetChildren()) do
+		local newStyle = require(s)
+
+		if getmetatable(newStyle) then
+			warn(s.Name .. " has a metatable. Is this intended?")
+		else
+			setmetatable(newStyle, ProximityPromptMetaTable)
+		end
+
+		for _, field in ipairs(requiredFields) do
+			assert(newStyle[field], "Missing required field '" .. field .. "'")
+
+			if field == "Gui" then
+				assert(not newStyle.Gui.ResetOnSpawn, "Gui for '" .. s.Name .. "' has 'ResetOnSpawn' enabled.")
+			end
+		end
+
+		proximityPromptStyles[s.Name] = newStyle
+	end
+end
+
 local typeTriggeredCallbacks = {}
 local typeGuards = {}
 
