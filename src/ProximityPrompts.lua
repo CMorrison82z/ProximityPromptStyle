@@ -126,6 +126,28 @@ function m:AddStyle(s : ModuleScript)
 	proximityPromptStyles[s.Name] = newStyle
 end
 
+function m:AddStyles(cont : Folder)
+	for index, s in ipairs(cont:GetChildren()) do
+		local newStyle = require(s)
+
+		if getmetatable(newStyle) then
+			warn(s.Name .. " has a metatable. Is this intended?")
+		else
+			setmetatable(newStyle, ProximityPromptMetaTable)
+		end
+
+		for _, field in ipairs(requiredFields) do
+			assert(newStyle[field], "Missing required field '" .. field .. "'")
+
+			if field == "Gui" then
+				assert(not newStyle.Gui.ResetOnSpawn, "Gui for '" .. s.Name .. "' has 'ResetOnSpawn' enabled.")
+			end
+		end
+
+		proximityPromptStyles[s.Name] = newStyle
+	end
+end
+
 local typeTriggeredCallbacks = {}
 local typeGuards = {}
 
@@ -189,29 +211,31 @@ local wassert = function(cond, msg)
 end
 
 proximityPromptService.PromptShown:Connect(function(prompt, inputType)
-	if prompt.Style ~= Enum.ProximityPromptStyle.Custom then return end
-
-	local style = proximityPromptStyles[prompt:GetAttribute"Style"]
 	local promptType = proximityPromptStyles[prompt:GetAttribute"Type"]
 
-	assert(style, "Provided a custom proximity prompt, but no style was found for Attribute'Style' : '" .. tostring(prompt:GetAttribute"Style") .. "'")
 	wassert(promptType, "Missing prompt 'Type' for prompt in '" .. prompt.Parent.Name .. "'")
 
 	for _, guardF in ipairs(typeGuards[promptType] or {}) do
 		if guardF(prompt) then return end
 	end
 
-	style:Show(prompt, inputType, promptType)
+	if prompt.Style == Enum.ProximityPromptStyle.Custom then
+		local style = proximityPromptStyles[prompt:GetAttribute"Style"]
+ 
+		assert(style, "Provided a custom proximity prompt, but no style was found for Attribute'Style' : '" .. tostring(prompt:GetAttribute"Style") .. "'")
+
+		style:Show(prompt, inputType, promptType)
+
+		prompt.PromptHidden:ConnectOnce(function()
+			style:Hide()
+		end)
+	end
 
 	local _tConn = prompt.Triggered:Connect(function()
 		for _, callback in ipairs(typeTriggeredCallbacks[promptType] or {}) do
-			if callback(prompt) then return end
+			callback(prompt)
 		end
 	end)
-
-	prompt.PromptHidden:Wait()
-
-	style:Hide()
 end)
 
 return m
